@@ -1,0 +1,1908 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>10인 폭탄 릴레이 온라인 (2술래 · 10맵)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet">
+  <!-- GitHub Pages 정적 웹 환경에서 서버 없이 온라인 P2P 멀티플레이를 지원하는 PeerJS -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    body {
+      margin: 0;
+      background: #090d16;
+      color: #f8fafc;
+      font-family: 'Noto Sans KR', system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    canvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* 상단 HUD */
+    #hud {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .hud-box {
+      background: rgba(15, 23, 42, 0.84);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      backdrop-filter: blur(10px);
+      border-radius: 14px;
+      padding: 9px 13px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+      max-width: 48vw;
+    }
+
+    #timer {
+      font-size: 26px;
+      font-weight: 900;
+      color: #facc15;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+
+    #timer.danger {
+      color: #ef4444;
+      animation: pulseText 0.45s infinite alternate;
+    }
+
+    @keyframes pulseText {
+      from { transform: scale(1); }
+      to { transform: scale(1.07); }
+    }
+
+    .sub-info {
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .map-pill {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 999px;
+      padding: 2px 8px;
+      margin-top: 4px;
+    }
+
+    /* 왼쪽 상단 이모티콘 버튼 및 선택 팝업 */
+    .hud-left-group {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .hud-left-group > * {
+      pointer-events: auto;
+    }
+
+    #emoteWrap {
+      position: relative;
+      display: none;
+    }
+
+    #emoteToggleBtn {
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(250, 204, 21, 0.45);
+      backdrop-filter: blur(10px);
+      border-radius: 14px;
+      padding: 9px 12px;
+      color: #fef08a;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+      transition: transform 0.1s ease, border-color 0.15s ease;
+    }
+
+    #emoteToggleBtn:active {
+      transform: scale(0.94);
+    }
+
+    #emoteToggleBtn .emote-icon {
+      font-size: 20px;
+      line-height: 1;
+    }
+
+    #emoteToggleBtn .emote-label {
+      font-size: 10.5px;
+      color: #e2e8f0;
+    }
+
+    #emotePicker {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      display: none;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.94);
+      border: 1px solid rgba(148, 163, 184, 0.32);
+      backdrop-filter: blur(12px);
+      border-radius: 14px;
+      padding: 8px;
+      box-shadow: 0 14px 32px rgba(0, 0, 0, 0.55);
+      z-index: 30;
+      width: 196px;
+    }
+
+    #emotePicker.open {
+      display: grid;
+    }
+
+    .emote-item-btn {
+      background: #1e293b;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 10px;
+      height: 40px;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+      transition: transform 0.08s ease, background 0.12s ease;
+    }
+
+    .emote-item-btn:hover,
+    .emote-item-btn:active {
+      background: #334155;
+      border-color: #38bdf8;
+      transform: scale(1.08);
+    }
+
+    .emote-key-hint {
+      position: absolute;
+      bottom: 2px;
+      right: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+
+    /* 좌측 하단 가상 조이스틱 */
+    #joystickZone {
+      position: fixed;
+      left: 18px;
+      bottom: 18px;
+      width: 136px;
+      height: 136px;
+      z-index: 12;
+      display: none;
+      touch-action: none;
+    }
+
+    #joystickBase {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.55);
+      border: 2px solid rgba(148, 163, 184, 0.35);
+      backdrop-filter: blur(6px);
+      position: relative;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    #joystickKnob {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #7dd3fc, #0284c7);
+      border: 2px solid #e0f2fe;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.6);
+      pointer-events: none;
+    }
+
+    /* 우측 하단 3초 쿨타임 대쉬 버튼 */
+    #dashBtn {
+      position: fixed;
+      right: 22px;
+      bottom: 24px;
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      border: 3px solid #38bdf8;
+      background: radial-gradient(circle at 30% 30%, #2563eb, #1e3a8a);
+      color: #ffffff;
+      font-family: inherit;
+      font-weight: 900;
+      font-size: 16px;
+      letter-spacing: 0.04em;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 26px rgba(37, 99, 235, 0.55);
+      z-index: 12;
+      cursor: pointer;
+      touch-action: none;
+      transition: transform 0.08s ease;
+    }
+
+    #dashBtn:active:not(.cooldown) {
+      transform: scale(0.92);
+    }
+
+    #dashBtn.cooldown {
+      border-color: #64748b;
+      background: rgba(30, 41, 59, 0.85);
+      color: #94a3b8;
+      box-shadow: none;
+      cursor: default;
+    }
+
+    #dashSub {
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 2px;
+      color: #bae6fd;
+    }
+
+    #dashBtn.cooldown #dashSub {
+      color: #facc15;
+      font-size: 14px;
+    }
+
+    /* 메인 로비 / 온라인 방 / 결과 오버레이 */
+    #overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 11, 20, 0.9);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 25;
+      padding: 14px;
+    }
+
+    .panel {
+      width: 100%;
+      max-width: 600px;
+      max-height: 94vh;
+      overflow-y: auto;
+      background: #131c31;
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+    }
+
+    .top-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(249, 115, 22, 0.16);
+      color: #fb923c;
+      border: 1px solid rgba(249, 115, 22, 0.4);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+    }
+
+    .badge.online {
+      background: rgba(34, 197, 94, 0.16);
+      color: #4ade80;
+      border-color: rgba(34, 197, 94, 0.4);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      font-weight: 900;
+    }
+
+    p.desc {
+      margin: 0 0 14px;
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    .section-label {
+      font-size: 12.5px;
+      font-weight: 700;
+      margin-bottom: 7px;
+      color: #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .skin-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 7px;
+      margin-bottom: 16px;
+    }
+
+    @media (max-width: 500px) {
+      .skin-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .skin-btn {
+      background: #1b2742;
+      border: 2px solid rgba(148, 163, 184, 0.14);
+      border-radius: 11px;
+      padding: 8px 5px;
+      color: #e2e8f0;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      transition: transform 0.1s ease, border-color 0.15s ease;
+    }
+
+    .skin-btn.active {
+      border-color: #38bdf8;
+      background: #23355b;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+    }
+
+    .swatch {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+    }
+
+    /* 매칭 및 온라인 방 컨트롤 영역 */
+    .action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    @media (max-width: 480px) {
+      .action-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 13px 14px;
+      font-size: 15px;
+      font-weight: 900;
+      border: none;
+      border-radius: 13px;
+      background: linear-gradient(135deg, #f97316, #ef4444);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(239, 68, 68, 0.35);
+    }
+
+    .btn-secondary {
+      width: 100%;
+      padding: 13px 14px;
+      font-size: 15px;
+      font-weight: 900;
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      border-radius: 13px;
+      background: linear-gradient(135deg, #0284c7, #1d4ed8);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(2, 132, 199, 0.3);
+    }
+
+    .btn-primary:disabled, .btn-secondary:disabled {
+      opacity: 0.55;
+      cursor: default;
+    }
+
+    .join-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    #roomCodeInput {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 12px;
+      padding: 11px 14px;
+      color: #f8fafc;
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 0.25em;
+      text-align: center;
+      outline: none;
+    }
+
+    #roomCodeInput::placeholder {
+      letter-spacing: normal;
+      font-size: 13px;
+      font-weight: 500;
+      color: #64748b;
+    }
+
+    #joinRoomBtn {
+      padding: 11px 18px;
+      border-radius: 12px;
+      border: none;
+      background: #10b981;
+      color: #052e16;
+      font-weight: 900;
+      font-size: 14px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* 온라인 방 대기실 박스 */
+    #roomLobbyBox {
+      display: none;
+      margin-top: 12px;
+      padding: 14px;
+      background: #0f172a;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 14px;
+    }
+
+    .code-display {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #1e293b;
+      padding: 10px 14px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+    }
+
+    .code-digits {
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: 0.22em;
+      color: #38bdf8;
+    }
+
+    #copyCodeBtn {
+      background: #334155;
+      color: #f8fafc;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    #memberList {
+      font-size: 12.5px;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+      line-height: 1.6;
+    }
+
+    #queueStatus {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #fbbf24;
+      min-height: 20px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- 상단 HUD -->
+  <div id="hud">
+    <div class="hud-left-group">
+      <div class="hud-box">
+        <div id="timer">60.0s</div>
+        <div class="sub-info" id="carrierText">폭탄 술래(2명): -</div>
+        <div class="map-pill" id="mapNameBadge">맵: 대기 중</div>
+      </div>
+
+      <!-- 왼쪽 상단 이모티콘 버튼 & 팝업 -->
+      <div id="emoteWrap">
+        <button id="emoteToggleBtn" type="button" aria-label="이모티콘 열기">
+          <span class="emote-icon">😊</span>
+          <span class="emote-label">이모티콘</span>
+        </button>
+        <div id="emotePicker"></div>
+      </div>
+    </div>
+
+    <div class="hud-box" style="text-align:right;">
+      <div style="font-weight:900; font-size:13.5px;" id="myStatus">대기 중</div>
+      <div class="sub-info" id="aliveText">생존: 10 / 10</div>
+      <div class="sub-info" id="netModeText" style="color:#4ade80;">온라인 준비 완료</div>
+    </div>
+  </div>
+
+  <!-- 좌측 하단 움직임 조이스틱 -->
+  <div id="joystickZone">
+    <div id="joystickBase">
+      <div id="joystickKnob"></div>
+    </div>
+  </div>
+
+  <!-- 우측 하단 3초 쿨타임 대쉬 버튼 -->
+  <button id="dashBtn" type="button">
+    <span>DASH</span>
+    <span id="dashSub">준비됨</span>
+  </button>
+
+  <!-- 로비 / 온라인 방 / 결과 오버레이 -->
+  <div id="overlay">
+    <div class="panel">
+      <div class="top-badges">
+        <span class="badge">술래 2명 · 60초 서바이벌</span>
+        <span class="badge">랜덤 10종 맵</span>
+        <span class="badge online">GitHub 웹 P2P 온라인 지원</span>
+      </div>
+      <h1>10인 폭탄 릴레이 온라인</h1>
+      <p class="desc">
+        10명 중 <b>랜덤 2명</b>이 폭탄 술래가 됩니다! 닿으면 폭탄이 넘어가며 <b>60초</b> 종료 시 폭탄을 든 2명이 사망합니다.
+        빈자리는 자동으로 <b>AI 봇</b>이 채워 언제든 10인 플레이가 가능합니다.
+      </p>
+
+      <div class="section-label">
+        <span>스킨 선택 (10종)</span>
+        <span id="selectedSkinLabel" style="color:#38bdf8;">네온 슬라임</span>
+      </div>
+      <div class="skin-grid" id="skinGrid"></div>
+
+      <!-- 랜덤 매치 & 방 만들기 -->
+      <div class="action-grid">
+        <button id="randomMatchBtn" class="btn-primary" type="button">⚡ 랜덤 매치 (5초 후 AI)</button>
+        <button id="createRoomBtn" class="btn-secondary" type="button">🏠 방 만들기 (5자리 코드)</button>
+      </div>
+
+      <!-- 5자리 코드 입력 및 참가 -->
+      <div class="join-row">
+        <input id="roomCodeInput" type="text" inputmode="numeric" maxlength="5" placeholder="5자리 방 코드 입력 (예: 48291)" />
+        <button id="joinRoomBtn" type="button">방 참가</button>
+      </div>
+
+      <!-- 방 생성/참가 시 표시되는 온라인 대기실 -->
+      <div id="roomLobbyBox">
+        <div class="code-display">
+          <div>
+            <div style="font-size:11px; color:#94a3b8;">친구에게 공유할 5자리 방 코드</div>
+            <div class="code-digits" id="displayRoomCode">-----</div>
+          </div>
+          <button id="copyCodeBtn" type="button">코드 복사</button>
+        </div>
+        <div id="memberList">접속 인원 (1 / 10): 나 (방장)</div>
+        <button id="startRoomGameBtn" class="btn-primary" type="button">지금 시작하기 (남은 자리는 AI 채움)</button>
+      </div>
+
+      <div id="queueStatus"></div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. 10종 스킨 및 10종 랜덤 맵 데이터 정의
+    // =========================================================================
+    const SKINS = [
+      { name: "네온 슬라임", color: "#00f5d4", ring: "#9ef01a" },
+      { name: "마그마 코어", color: "#ff5400", ring: "#ffbd00" },
+      { name: "고릴라 탱크", color: "#7f5539", ring: "#ddb892" },
+      { name: "사이버 바이퍼", color: "#9b5de5", ring: "#f15bb5" },
+      { name: "아이스 큐브", color: "#00bbf9", ring: "#caf0f8" },
+      { name: "솔라 골드", color: "#ffd166", ring: "#ffffff" },
+      { name: "크림슨 팬텀", color: "#ef233c", ring: "#ffccd5" },
+      { name: "아틱 폭스", color: "#f8f9fa", ring: "#fb8500" },
+      { name: "독성 스포어", color: "#70e000", ring: "#ccff33" },
+      { name: "쉐도우 코어", color: "#3a86ff", ring: "#a2d2ff" }
+    ];
+
+    const WORLD_W = 2400;
+    const WORLD_H = 1800;
+    const TOTAL_PLAYERS = 10;
+    const BOMB_COUNT = 2; // 술래 2명
+    const ROUND_TIME = 60.0;
+    const DASH_COOLDOWN = 3.0; // 대쉬 쿨타임 3초
+    const DASH_DURATION = 0.24;
+    const EMOTES = ["😂", "😱", "💣", "🔥", "👋", "👑", "😭", "⚡"];
+    const EMOTE_DURATION = 2.5;
+
+    // 10가지 넓은 2D 맵 템플릿
+    const MAPS = [
+      {
+        name: "1. 중앙 요새",
+        bg: "#101726",
+        border: "#38bdf8",
+        wallFill: "#1e293b",
+        wallStroke: "#475569",
+        obstacles: [
+          { x: 1040, y: 760, w: 320, h: 280 },
+          { x: 460, y: 380, w: 280, h: 90 },
+          { x: 1660, y: 380, w: 280, h: 90 },
+          { x: 460, y: 1330, w: 280, h: 90 },
+          { x: 1660, y: 1330, w: 280, h: 90 }
+        ]
+      },
+      {
+        name: "2. 십자 미로",
+        bg: "#111927",
+        border: "#a855f7",
+        wallFill: "#241b35",
+        wallStroke: "#7e22ce",
+        obstacles: [
+          { x: 1140, y: 340, w: 120, h: 420 },
+          { x: 1140, y: 1040, w: 120, h: 420 },
+          { x: 520, y: 840, w: 460, h: 120 },
+          { x: 1420, y: 840, w: 460, h: 120 }
+        ]
+      },
+      {
+        name: "3. 4대 기둥 광장",
+        bg: "#0f1c24",
+        border: "#14b8a6",
+        wallFill: "#162e38",
+        wallStroke: "#0d9488",
+        obstacles: [
+          { x: 640, y: 480, w: 240, h: 240 },
+          { x: 1520, y: 480, w: 240, h: 240 },
+          { x: 640, y: 1080, w: 240, h: 240 },
+          { x: 1520, y: 1080, w: 240, h: 240 }
+        ]
+      },
+      {
+        name: "4. 쌍둥이 벙커",
+        bg: "#1a1412",
+        border: "#f97316",
+        wallFill: "#2d201c",
+        wallStroke: "#ea580c",
+        obstacles: [
+          { x: 560, y: 540, w: 110, h: 720 },
+          { x: 1730, y: 540, w: 110, h: 720 },
+          { x: 960, y: 420, w: 480, h: 90 },
+          { x: 960, y: 1290, w: 480, h: 90 }
+        ]
+      },
+      {
+        name: "5. 지그재그 협곡",
+        bg: "#121820",
+        border: "#eab308",
+        wallFill: "#26261c",
+        wallStroke: "#ca8a04",
+        obstacles: [
+          { x: 340, y: 440, w: 680, h: 90 },
+          { x: 1380, y: 740, w: 680, h: 90 },
+          { x: 340, y: 1040, w: 680, h: 90 },
+          { x: 1380, y: 1340, w: 680, h: 90 }
+        ]
+      },
+      {
+        name: "6. 링 아레나",
+        bg: "#141324",
+        border: "#ec4899",
+        wallFill: "#291d36",
+        wallStroke: "#db2777",
+        obstacles: [
+          { x: 760, y: 420, w: 880, h: 85 },
+          { x: 760, y: 1295, w: 880, h: 85 },
+          { x: 540, y: 620, w: 85, h: 560 },
+          { x: 1775, y: 620, w: 85, h: 560 }
+        ]
+      },
+      {
+        name: "7. 연구소 격벽",
+        bg: "#0e1a1f",
+        border: "#06b6d4",
+        wallFill: "#162b33",
+        wallStroke: "#0891b2",
+        obstacles: [
+          { x: 480, y: 240, w: 90, h: 460 },
+          { x: 480, y: 1100, w: 90, h: 460 },
+          { x: 1155, y: 540, w: 90, h: 720 },
+          { x: 1830, y: 240, w: 90, h: 460 },
+          { x: 1830, y: 1100, w: 90, h: 460 }
+        ]
+      },
+      {
+        name: "8. 대각선 바리케이드",
+        bg: "#17141d",
+        border: "#8b5cf6",
+        wallFill: "#251f33",
+        wallStroke: "#7c3aed",
+        obstacles: [
+          { x: 420, y: 360, w: 220, h: 120 },
+          { x: 760, y: 620, w: 220, h: 120 },
+          { x: 1100, y: 880, w: 220, h: 120 },
+          { x: 1440, y: 1140, w: 220, h: 120 },
+          { x: 1760, y: 1380, w: 220, h: 120 }
+        ]
+      },
+      {
+        name: "9. 외곽 요새 성벽",
+        bg: "#111b17",
+        border: "#22c55e",
+        wallFill: "#192e24",
+        wallStroke: "#16a34a",
+        obstacles: [
+          { x: 320, y: 300, w: 500, h: 90 },
+          { x: 1580, y: 300, w: 500, h: 90 },
+          { x: 320, y: 1410, w: 500, h: 90 },
+          { x: 1580, y: 1410, w: 500, h: 90 },
+          { x: 960, y: 820, w: 480, h: 160 }
+        ]
+      },
+      {
+        name: "10. 운석 파편 지대",
+        bg: "#18131a",
+        border: "#f43f5e",
+        wallFill: "#2e1d26",
+        wallStroke: "#e11d48",
+        obstacles: [
+          { x: 420, y: 420, w: 140, h: 140 },
+          { x: 880, y: 340, w: 150, h: 130 },
+          { x: 1450, y: 400, w: 140, h: 150 },
+          { x: 1880, y: 540, w: 150, h: 140 },
+          { x: 640, y: 860, w: 160, h: 150 },
+          { x: 1220, y: 820, w: 170, h: 160 },
+          { x: 1740, y: 1020, w: 150, h: 150 },
+          { x: 460, y: 1280, w: 160, h: 140 },
+          { x: 1120, y: 1320, w: 180, h: 130 }
+        ]
+      }
+    ];
+
+    // =========================================================================
+    // 2. DOM 요소 & 게임 상태 변수
+    // =========================================================================
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const skinGrid = document.getElementById("skinGrid");
+    const selectedSkinLabel = document.getElementById("selectedSkinLabel");
+    const randomMatchBtn = document.getElementById("randomMatchBtn");
+    const createRoomBtn = document.getElementById("createRoomBtn");
+    const roomCodeInput = document.getElementById("roomCodeInput");
+    const joinRoomBtn = document.getElementById("joinRoomBtn");
+    const roomLobbyBox = document.getElementById("roomLobbyBox");
+    const displayRoomCode = document.getElementById("displayRoomCode");
+    const copyCodeBtn = document.getElementById("copyCodeBtn");
+    const memberListEl = document.getElementById("memberList");
+    const startRoomGameBtn = document.getElementById("startRoomGameBtn");
+    const queueStatus = document.getElementById("queueStatus");
+    const overlay = document.getElementById("overlay");
+    const timerEl = document.getElementById("timer");
+    const carrierTextEl = document.getElementById("carrierText");
+    const mapNameBadge = document.getElementById("mapNameBadge");
+    const myStatusEl = document.getElementById("myStatus");
+    const aliveTextEl = document.getElementById("aliveText");
+    const netModeText = document.getElementById("netModeText");
+
+    const emoteWrap = document.getElementById("emoteWrap");
+    const emoteToggleBtn = document.getElementById("emoteToggleBtn");
+    const emotePicker = document.getElementById("emotePicker");
+
+    const joystickZone = document.getElementById("joystickZone");
+    const joystickKnob = document.getElementById("joystickKnob");
+    const dashBtn = document.getElementById("dashBtn");
+    const dashSub = document.getElementById("dashSub");
+
+    let selectedSkinIdx = 0;
+    let state = "LOBBY"; // LOBBY | MATCHING | ROOM_WAIT | PLAYING | ENDED
+    let matchCountdown = 5.0;
+    let roundTimer = ROUND_TIME;
+    let currentMap = MAPS[0];
+    let players = [];
+    let passEffects = [];
+    let dashTrails = [];
+    let camera = { x: WORLD_W / 2, y: WORLD_H / 2 };
+
+    // 온라인 P2P (PeerJS) 상태
+    let peer = null;
+    let isHost = true;
+    let myPeerId = "local-host";
+    let roomCode = "";
+    let hostConn = null; // 게스트일 때 방장 연결
+    let clientConns = new Map(); // 방장일 때 게스트 연결 목록
+    let lobbyMembers = []; // { peerId, name, skinIdx }
+
+    // 스킨 버튼 10종 생성
+    SKINS.forEach((s, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "skin-btn" + (i === 0 ? " active" : "");
+      btn.innerHTML = `
+        <span class="swatch" style="background:${s.color}; border: 3px solid ${s.ring};"></span>
+        <span>${s.name}</span>
+      `;
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".skin-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        selectedSkinIdx = i;
+        selectedSkinLabel.textContent = s.name;
+        if (state === "ROOM_WAIT") {
+          if (isHost) {
+            const me = lobbyMembers.find(m => m.peerId === myPeerId);
+            if (me) me.skinIdx = selectedSkinIdx;
+            broadcastLobbyState();
+          } else if (hostConn && hostConn.open) {
+            hostConn.send({ type: "UPDATE_SKIN", skinIdx: selectedSkinIdx });
+          }
+        }
+      });
+      skinGrid.appendChild(btn);
+    });
+
+    // 8종 빠른 이모티콘 선택 버튼 생성 (숫자키 1~8 단축키 지원)
+    EMOTES.forEach((emoji, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "emote-item-btn";
+      btn.innerHTML = `<span>${emoji}</span><span class="emote-key-hint">${idx + 1}</span>`;
+      btn.addEventListener("pointerdown", (e) => {
+        e.stopPropagation();
+        triggerMyEmote(emoji);
+        emotePicker.classList.remove("open");
+      });
+      emotePicker.appendChild(btn);
+    });
+
+    emoteToggleBtn.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      emotePicker.classList.toggle("open");
+    });
+
+    window.addEventListener("pointerdown", (e) => {
+      if (!emoteWrap.contains(e.target)) {
+        emotePicker.classList.remove("open");
+      }
+    });
+
+    function showPlayerEmote(player, emoji) {
+      if (!player || !player.alive || !EMOTES.includes(emoji)) return;
+      player.emote = emoji;
+      player.emoteTimer = EMOTE_DURATION;
+    }
+
+    function triggerMyEmote(emoji) {
+      if (state !== "PLAYING") return;
+      const me = players.find(p => p.peerId === myPeerId);
+      if (!me || !me.alive) return;
+
+      showPlayerEmote(me, emoji);
+
+      if (isHost) {
+        clientConns.forEach(conn => {
+          if (conn.open) {
+            conn.send({ type: "EMOTE", peerId: myPeerId, emoji });
+          }
+        });
+      } else if (hostConn && hostConn.open) {
+        hostConn.send({ type: "EMOTE", emoji });
+      }
+    }
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    // =========================================================================
+    // 3. 조이스틱(좌측 하단) & 대쉬 버튼(우측 하단) + PC 키보드 입력
+    // =========================================================================
+    const keys = {};
+    window.addEventListener("keydown", (e) => {
+      const k = e.key.toLowerCase();
+      keys[k] = true;
+      if (e.code === "Space" && state === "PLAYING") {
+        e.preventDefault();
+        triggerMyDash();
+      }
+      if (state === "PLAYING" && e.key >= "1" && e.key <= "8") {
+        const idx = Number(e.key) - 1;
+        if (EMOTES[idx]) {
+          triggerMyEmote(EMOTES[idx]);
+          emotePicker.classList.remove("open");
+        }
+      }
+    });
+    window.addEventListener("keyup", (e) => {
+      keys[e.key.toLowerCase()] = false;
+    });
+
+    // 조이스틱 멀티터치 독립 추적
+    let joyPointerId = null;
+    let joyVec = { x: 0, y: 0 };
+
+    function updateJoystickFromClient(clientX, clientY) {
+      const rect = joystickZone.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const maxDist = rect.width * 0.36;
+
+      let dx = clientX - cx;
+      let dy = clientY - cy;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > maxDist) {
+        dx = (dx / dist) * maxDist;
+        dy = (dy / dist) * maxDist;
+      }
+
+      joystickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      joyVec.x = dist > 6 ? dx / maxDist : 0;
+      joyVec.y = dist > 6 ? dy / maxDist : 0;
+    }
+
+    function resetJoystick() {
+      joyPointerId = null;
+      joyVec.x = 0;
+      joyVec.y = 0;
+      joystickKnob.style.transform = "translate(-50%, -50%)";
+    }
+
+    joystickZone.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      joyPointerId = e.pointerId;
+      joystickZone.setPointerCapture(e.pointerId);
+      updateJoystickFromClient(e.clientX, e.clientY);
+    });
+
+    joystickZone.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== joyPointerId) return;
+      e.stopPropagation();
+      updateJoystickFromClient(e.clientX, e.clientY);
+    });
+
+    joystickZone.addEventListener("pointerup", (e) => {
+      if (e.pointerId === joyPointerId) resetJoystick();
+    });
+    joystickZone.addEventListener("pointercancel", (e) => {
+      if (e.pointerId === joyPointerId) resetJoystick();
+    });
+
+    // 대쉬 발동 함수 (3초 쿨타임)
+    function triggerMyDash() {
+      if (state !== "PLAYING") return;
+      const me = players.find(p => p.peerId === myPeerId);
+      if (!me || !me.alive) return;
+
+      if (isHost) {
+        if (me.dashCooldown <= 0) {
+          me.dashTime = DASH_DURATION;
+          me.dashCooldown = DASH_COOLDOWN;
+        }
+      } else if (hostConn && hostConn.open) {
+        // 게스트도 로컬 예측 + 방장에게 대쉬 요청 전송
+        if (me.dashCooldown <= 0) {
+          me.dashTime = DASH_DURATION;
+          me.dashCooldown = DASH_COOLDOWN;
+          hostConn.send({ type: "INPUT", vx: joyVec.x, vy: joyVec.y, dash: true });
+        }
+      }
+    }
+
+    dashBtn.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      triggerMyDash();
+    });
+
+    function setGameplayControlsVisible(visible) {
+      joystickZone.style.display = visible ? "block" : "none";
+      dashBtn.style.display = visible ? "flex" : "none";
+      emoteWrap.style.display = visible ? "block" : "none";
+      if (!visible) {
+        resetJoystick();
+        emotePicker.classList.remove("open");
+      }
+    }
+
+    // =========================================================================
+    // 4. 온라인 멀티플레이 (PeerJS 5자리 방 만들기 & 참가)
+    // =========================================================================
+    function destroyPeer() {
+      if (peer) {
+        try { peer.destroy(); } catch (e) {}
+        peer = null;
+      }
+      hostConn = null;
+      clientConns.clear();
+    }
+
+    function generate5DigitCode() {
+      return String(Math.floor(10000 + Math.random() * 90000));
+    }
+
+    function updateLobbyMemberUI() {
+      const names = lobbyMembers.map((m, idx) =>
+        `${idx === 0 ? "👑" : "👤"} ${m.name} (${SKINS[m.skinIdx].name})`
+      );
+      memberListEl.innerHTML = `<b>접속 인원 (${lobbyMembers.length} / 10명)</b><br>${names.join(" · ")}`;
+    }
+
+    function broadcastLobbyState() {
+      updateLobbyMemberUI();
+      const payload = { type: "LOBBY_STATE", members: lobbyMembers, roomCode };
+      clientConns.forEach(conn => {
+        if (conn.open) conn.send(payload);
+      });
+    }
+
+    // 방 만들기 버튼 (5자리 코드 생성)
+    createRoomBtn.addEventListener("click", () => {
+      if (typeof Peer === "undefined") {
+        queueStatus.textContent = "오프라인 환경입니다. 랜덤 매치로 AI 대전을 시작하세요!";
+        return;
+      }
+      destroyPeer();
+      isHost = true;
+      roomCode = generate5DigitCode();
+      const peerId = `bomb10-room-${roomCode}`;
+      myPeerId = peerId;
+
+      createRoomBtn.disabled = true;
+      queueStatus.style.color = "#38bdf8";
+      queueStatus.textContent = "온라인 방 생성 중...";
+
+      peer = new Peer(peerId);
+      peer.on("open", () => {
+        state = "ROOM_WAIT";
+        createRoomBtn.disabled = false;
+        roomLobbyBox.style.display = "block";
+        startRoomGameBtn.style.display = "block";
+        displayRoomCode.textContent = roomCode;
+        lobbyMembers = [{ peerId: myPeerId, name: "방장(나)", skinIdx: selectedSkinIdx }];
+        broadcastLobbyState();
+        queueStatus.style.color = "#4ade80";
+        queueStatus.textContent = `방 생성 완료! 친구에게 5자리 코드 [${roomCode}]를 알려주세요.`;
+        netModeText.textContent = `온라인 방 #${roomCode}`;
+      });
+
+      peer.on("connection", (conn) => {
+        if (state !== "ROOM_WAIT" || lobbyMembers.length >= TOTAL_PLAYERS) {
+          conn.close();
+          return;
+        }
+        clientConns.set(conn.peer, conn);
+
+        conn.on("data", (data) => {
+          if (data.type === "JOIN_INFO") {
+            const guestNum = lobbyMembers.length + 1;
+            lobbyMembers.push({
+              peerId: conn.peer,
+              name: `유저_${guestNum}`,
+              skinIdx: data.skinIdx ?? 0
+            });
+            broadcastLobbyState();
+          } else if (data.type === "UPDATE_SKIN") {
+            const m = lobbyMembers.find(item => item.peerId === conn.peer);
+            if (m) {
+              m.skinIdx = data.skinIdx;
+              broadcastLobbyState();
+            }
+          } else if (data.type === "INPUT" && state === "PLAYING") {
+            const p = players.find(item => item.peerId === conn.peer);
+            if (p && p.alive) {
+              p.remoteVx = Math.max(-1, Math.min(1, data.vx || 0));
+              p.remoteVy = Math.max(-1, Math.min(1, data.vy || 0));
+              if (data.dash && p.dashCooldown <= 0) {
+                p.dashTime = DASH_DURATION;
+                p.dashCooldown = DASH_COOLDOWN;
+              }
+            }
+          } else if (data.type === "EMOTE" && state === "PLAYING") {
+            const p = players.find(item => item.peerId === conn.peer);
+            if (p && p.alive && EMOTES.includes(data.emoji)) {
+              showPlayerEmote(p, data.emoji);
+              clientConns.forEach(otherConn => {
+                if (otherConn.open) {
+                  otherConn.send({ type: "EMOTE", peerId: conn.peer, emoji: data.emoji });
+                }
+              });
+            }
+          }
+        });
+
+        conn.on("close", () => {
+          clientConns.delete(conn.peer);
+          lobbyMembers = lobbyMembers.filter(m => m.peerId !== conn.peer);
+          if (state === "ROOM_WAIT") broadcastLobbyState();
+        });
+      });
+
+      peer.on("error", (err) => {
+        createRoomBtn.disabled = false;
+        queueStatus.style.color = "#ef4444";
+        queueStatus.textContent = `방 생성 오류 (${err.type}). 다시 눌러주세요.`;
+      });
+    });
+
+    // 코드 복사 버튼
+    copyCodeBtn.addEventListener("click", () => {
+      if (!roomCode) return;
+      const temp = document.createElement("textarea");
+      temp.value = roomCode;
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand("copy");
+      document.body.removeChild(temp);
+      copyCodeBtn.textContent = "복사됨!";
+      setTimeout(() => { copyCodeBtn.textContent = "코드 복사"; }, 1500);
+    });
+
+    // 5자리 코드로 방 참가 버튼
+    joinRoomBtn.addEventListener("click", () => {
+      const code = roomCodeInput.value.trim();
+      if (!/^\d{5}$/.test(code)) {
+        queueStatus.style.color = "#ef4444";
+        queueStatus.textContent = "5자리 숫자 방 코드를 정확히 입력하세요!";
+        return;
+      }
+      if (typeof Peer === "undefined") {
+        queueStatus.textContent = "오프라인 환경에서는 방 참가가 불가합니다.";
+        return;
+      }
+
+      destroyPeer();
+      isHost = false;
+      roomCode = code;
+      joinRoomBtn.disabled = true;
+      queueStatus.style.color = "#38bdf8";
+      queueStatus.textContent = `방 [${code}]에 접속 중...`;
+
+      peer = new Peer();
+      peer.on("open", (id) => {
+        myPeerId = id;
+        const conn = peer.connect(`bomb10-room-${code}`, { reliable: true });
+        hostConn = conn;
+
+        conn.on("open", () => {
+          state = "ROOM_WAIT";
+          joinRoomBtn.disabled = false;
+          roomLobbyBox.style.display = "block";
+          startRoomGameBtn.style.display = "none";
+          displayRoomCode.textContent = code;
+          conn.send({ type: "JOIN_INFO", skinIdx: selectedSkinIdx });
+          queueStatus.style.color = "#4ade80";
+          queueStatus.textContent = "방 입장 성공! 방장이 게임을 시작할 때까지 대기하세요.";
+          netModeText.textContent = `온라인 방 #${code}`;
+        });
+
+        conn.on("data", (data) => {
+          if (data.type === "LOBBY_STATE") {
+            lobbyMembers = data.members;
+            updateLobbyMemberUI();
+          } else if (data.type === "START_GAME") {
+            currentMap = MAPS[data.mapIdx];
+            mapNameBadge.textContent = `맵: ${currentMap.name}`;
+            players = data.players;
+            roundTimer = ROUND_TIME;
+            passEffects = [];
+            dashTrails = [];
+            state = "PLAYING";
+            overlay.style.display = "none";
+            setGameplayControlsVisible(true);
+            const me = players.find(p => p.peerId === myPeerId) || players[0];
+            camera.x = me.x;
+            camera.y = me.y;
+          } else if (data.type === "STATE_SYNC" && state === "PLAYING") {
+            roundTimer = data.roundTimer;
+            const localMe = players.find(p => p.peerId === myPeerId);
+            const savedEmote = localMe && localMe.emoteTimer > 0 ? localMe.emote : null;
+            const savedEmoteTimer = localMe ? localMe.emoteTimer : 0;
+            players = data.players;
+            if (savedEmote) {
+              const updatedMe = players.find(p => p.peerId === myPeerId);
+              if (updatedMe && (!updatedMe.emote || updatedMe.emoteTimer <= 0)) {
+                updatedMe.emote = savedEmote;
+                updatedMe.emoteTimer = savedEmoteTimer;
+              }
+            }
+            if (data.passEffects) passEffects = data.passEffects;
+          } else if (data.type === "EMOTE" && state === "PLAYING") {
+            const targetP = players.find(p => p.peerId === data.peerId);
+            if (targetP) showPlayerEmote(targetP, data.emoji);
+          } else if (data.type === "GAME_OVER") {
+            players = data.players;
+            finishRoundUI(data.deadNames);
+          }
+        });
+
+        conn.on("close", () => {
+          joinRoomBtn.disabled = false;
+          if (state === "PLAYING" || state === "ROOM_WAIT") {
+            state = "LOBBY";
+            setGameplayControlsVisible(false);
+            overlay.style.display = "flex";
+            roomLobbyBox.style.display = "none";
+            queueStatus.style.color = "#ef4444";
+            queueStatus.textContent = "방장과의 연결이 종료되었습니다.";
+          }
+        });
+      });
+
+      peer.on("error", () => {
+        joinRoomBtn.disabled = false;
+        queueStatus.style.color = "#ef4444";
+        queueStatus.textContent = `방 [${code}]을 찾을 수 없습니다. 코드를 확인하세요.`;
+      });
+    });
+
+    // 방장이 [지금 시작하기] 클릭 시
+    startRoomGameBtn.addEventListener("click", () => {
+      if (!isHost || state !== "ROOM_WAIT") return;
+      startHostMatch(lobbyMembers);
+    });
+
+    // =========================================================================
+    // 5. 랜덤 매치 (5초 대기 후 AI 자동 대체) & 매치 시작 로직
+    // =========================================================================
+    randomMatchBtn.addEventListener("click", () => {
+      if (state !== "LOBBY" && state !== "ENDED") return;
+      destroyPeer();
+      isHost = true;
+      myPeerId = "local-human";
+      roomLobbyBox.style.display = "none";
+      state = "MATCHING";
+      randomMatchBtn.disabled = true;
+      matchCountdown = 5.0;
+      netModeText.textContent = "랜덤 매치 (AI 혼합)";
+      queueStatus.style.color = "#fbbf24";
+      queueStatus.textContent = "매칭 중... (1 / 10명) · 5.0초 후 빈자리는 AI로 대체됩니다";
+    });
+
+    function startHostMatch(humanList) {
+      // 10가지 맵 중 랜덤 선택
+      const mapIdx = Math.floor(Math.random() * MAPS.length);
+      currentMap = MAPS[mapIdx];
+      mapNameBadge.textContent = `맵: ${currentMap.name}`;
+
+      players = [];
+      passEffects = [];
+      dashTrails = [];
+
+      for (let i = 0; i < TOTAL_PLAYERS; i++) {
+        const human = humanList[i];
+        const isHuman = Boolean(human);
+        const angle = (Math.PI * 2 * i) / TOTAL_PLAYERS;
+        const px = WORLD_W / 2 + Math.cos(angle) * 650;
+        const py = WORLD_H / 2 + Math.sin(angle) * 480;
+        const skin = isHuman
+          ? SKINS[human.skinIdx]
+          : SKINS[(i * 3 + Math.floor(Math.random() * SKINS.length)) % SKINS.length];
+
+        players.push({
+          id: i,
+          peerId: isHuman ? human.peerId : `ai-${i}`,
+          name: isHuman ? (human.peerId === myPeerId ? "나 (YOU)" : human.name) : `AI_${i}`,
+          isHuman,
+          isAI: !isHuman,
+          x: px,
+          y: py,
+          r: 20,
+          speed: isHuman ? 260 : 230,
+          skin,
+          hasBomb: false,
+          passCooldown: 0,
+          dashCooldown: 0,
+          dashTime: 0,
+          emote: null,
+          emoteTimer: 0,
+          remoteVx: 0,
+          remoteVy: 0,
+          alive: true,
+          aiDir: Math.random() * Math.PI * 2,
+          aiTimer: 0
+        });
+      }
+
+      // 10명 중 랜덤 2명에게 폭탄(술래 2명) 배정
+      const indices = Array.from({ length: TOTAL_PLAYERS }, (_, i) => i);
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      for (let b = 0; b < BOMB_COUNT; b++) {
+        players[indices[b]].hasBomb = true;
+      }
+
+      roundTimer = ROUND_TIME;
+      state = "PLAYING";
+      overlay.style.display = "none";
+      randomMatchBtn.disabled = false;
+      setGameplayControlsVisible(true);
+
+      const me = players.find(p => p.peerId === myPeerId) || players[0];
+      camera.x = me.x;
+      camera.y = me.y;
+
+      // 온라인 게스트들에게 게임 시작 동기화 전송
+      clientConns.forEach(conn => {
+        if (conn.open) {
+          conn.send({ type: "START_GAME", mapIdx, players });
+        }
+      });
+    }
+
+    // =========================================================================
+    // 6. 물리 충돌, 2술래 폭탄 전달, 3초 대쉬, 60초 종료 처리
+    // =========================================================================
+    function resolveObstacleCollision(p) {
+      p.x = Math.max(p.r + 16, Math.min(WORLD_W - p.r - 16, p.x));
+      p.y = Math.max(p.r + 16, Math.min(WORLD_H - p.r - 16, p.y));
+
+      for (const ob of currentMap.obstacles) {
+        const closestX = Math.max(ob.x, Math.min(p.x, ob.x + ob.w));
+        const closestY = Math.max(ob.y, Math.min(p.y, ob.y + ob.h));
+        const dx = p.x - closestX;
+        const dy = p.y - closestY;
+        const distSq = dx * dx + dy * dy;
+
+        if (distSq < p.r * p.r) {
+          const dist = Math.sqrt(distSq) || 0.01;
+          const overlap = p.r - dist;
+          p.x += (dx / dist) * overlap;
+          p.y += (dy / dist) * overlap;
+        }
+      }
+    }
+
+    function getMyMoveVector() {
+      let vx = joyVec.x;
+      let vy = joyVec.y;
+      if (keys["w"] || keys["arrowup"]) vy -= 1;
+      if (keys["s"] || keys["arrowdown"]) vy += 1;
+      if (keys["a"] || keys["arrowleft"]) vx -= 1;
+      if (keys["d"] || keys["arrowright"]) vx += 1;
+
+      const len = Math.hypot(vx, vy);
+      if (len > 1) {
+        vx /= len;
+        vy /= len;
+      }
+      return { vx, vy };
+    }
+
+    function updateMatching(dt) {
+      matchCountdown -= dt;
+      if (matchCountdown <= 0) {
+        startHostMatch([{ peerId: myPeerId, name: "나 (YOU)", skinIdx: selectedSkinIdx }]);
+      } else {
+        queueStatus.textContent =
+          `매칭 중... (1 / 10명) · ${matchCountdown.toFixed(1)}초 후 빈자리는 AI로 대체됩니다`;
+      }
+    }
+
+    let netSyncTimer = 0;
+
+    function updatePlaying(dt) {
+      const myInput = getMyMoveVector();
+
+      // 클라이언트 측 이모티콘 타이머 감소
+      for (const p of players) {
+        if (p.emoteTimer > 0) {
+          p.emoteTimer = Math.max(0, p.emoteTimer - dt);
+          if (p.emoteTimer <= 0) p.emote = null;
+        }
+      }
+
+      // 게스트는 방장에게 내 입력값 전송
+      if (!isHost) {
+        netSyncTimer += dt;
+        if (netSyncTimer >= 0.04 && hostConn && hostConn.open) {
+          netSyncTimer = 0;
+          hostConn.send({ type: "INPUT", vx: myInput.vx, vy: myInput.vy, dash: false });
+        }
+        updateHUDAndCamera(dt);
+        return;
+      }
+
+      // --- 이하 방장(Host) 및 싱글/AI 시뮬레이션 ---
+      roundTimer = Math.max(0, roundTimer - dt);
+
+      for (let i = passEffects.length - 1; i >= 0; i--) {
+        passEffects[i].life -= dt;
+        passEffects[i].radius += 190 * dt;
+        if (passEffects[i].life <= 0) passEffects.splice(i, 1);
+      }
+
+      for (let i = dashTrails.length - 1; i >= 0; i--) {
+        dashTrails[i].life -= dt;
+        if (dashTrails[i].life <= 0) dashTrails.splice(i, 1);
+      }
+
+      const carriers = players.filter(p => p.alive && p.hasBomb);
+
+      for (const p of players) {
+        if (!p.alive) continue;
+
+        if (p.passCooldown > 0) p.passCooldown = Math.max(0, p.passCooldown - dt);
+        if (p.dashCooldown > 0) p.dashCooldown = Math.max(0, p.dashCooldown - dt);
+        if (p.dashTime > 0) {
+          p.dashTime = Math.max(0, p.dashTime - dt);
+          dashTrails.push({ x: p.x, y: p.y, r: p.r, color: p.skin.color, life: 0.22 });
+        }
+
+        // 술래 보너스(+12%) + 대쉬 발동 시(2.35배 가속)
+        let moveSpeed = p.hasBomb ? p.speed * 1.12 : p.speed;
+        if (p.dashTime > 0) moveSpeed *= 2.35;
+
+        if (p.peerId === myPeerId) {
+          p.x += myInput.vx * moveSpeed * dt;
+          p.y += myInput.vy * moveSpeed * dt;
+        } else if (p.isHuman) {
+          p.x += (p.remoteVx || 0) * moveSpeed * dt;
+          p.y += (p.remoteVy || 0) * moveSpeed * dt;
+        } else {
+          // 스마트 AI: 2명의 술래 중 가장 가까운 술래 회피 또는 가장 가까운 도망자 추격
+          p.aiTimer -= dt;
+          if (p.hasBomb) {
+            let nearest = null;
+            let bestDist = Infinity;
+            for (const other of players) {
+              if (!other.alive || other.hasBomb) continue;
+              const d = Math.hypot(other.x - p.x, other.y - p.y);
+              if (d < bestDist) {
+                bestDist = d;
+                nearest = other;
+              }
+            }
+            if (nearest) {
+              const ang = Math.atan2(nearest.y - p.y, nearest.x - p.x);
+              p.x += Math.cos(ang) * moveSpeed * dt;
+              p.y += Math.sin(ang) * moveSpeed * dt;
+              if (bestDist < 190 && p.dashCooldown <= 0 && Math.random() < dt * 1.5) {
+                p.dashTime = DASH_DURATION;
+                p.dashCooldown = DASH_COOLDOWN;
+              }
+              if (!p.emote && Math.random() < dt * 0.14) {
+                showPlayerEmote(p, Math.random() < 0.5 ? "💣" : "🔥");
+              }
+            }
+          } else {
+            // 2명의 술래 중 가장 가까운 술래 찾기
+            let closestCarrier = null;
+            let minCarrierDist = Infinity;
+            for (const c of carriers) {
+              const d = Math.hypot(c.x - p.x, c.y - p.y);
+              if (d < minCarrierDist) {
+                minCarrierDist = d;
+                closestCarrier = c;
+              }
+            }
+
+            if (closestCarrier && minCarrierDist < 480) {
+              const ang = Math.atan2(p.y - closestCarrier.y, p.x - closestCarrier.x);
+              p.x += Math.cos(ang) * moveSpeed * dt;
+              p.y += Math.sin(ang) * moveSpeed * dt;
+              if (minCarrierDist < 150 && p.dashCooldown <= 0 && Math.random() < dt * 1.8) {
+                p.dashTime = DASH_DURATION;
+                p.dashCooldown = DASH_COOLDOWN;
+              }
+              if (!p.emote && minCarrierDist < 160 && Math.random() < dt * 0.35) {
+                showPlayerEmote(p, Math.random() < 0.6 ? "😱" : "⚡");
+              }
+            } else {
+              if (p.aiTimer <= 0) {
+                p.aiDir += (Math.random() - 0.5) * 2.4;
+                p.aiTimer = 0.6 + Math.random() * 1.1;
+              }
+              p.x += Math.cos(p.aiDir) * moveSpeed * 0.78 * dt;
+              p.y += Math.sin(p.aiDir) * moveSpeed * 0.78 * dt;
+              if (!p.emote && Math.random() < dt * 0.05) {
+                showPlayerEmote(p, Math.random() < 0.5 ? "😂" : "👋");
+              }
+            }
+          }
+        }
+
+        resolveObstacleCollision(p);
+      }
+
+      // 2명의 폭탄 보유자 각각 도망자와 접촉 시 폭탄 전달 판정
+      for (const carrier of players) {
+        if (!carrier.alive || !carrier.hasBomb || carrier.passCooldown > 0) continue;
+
+        for (const target of players) {
+          if (!target.alive || target.hasBomb || target.passCooldown > 0) continue;
+          const dist = Math.hypot(target.x - carrier.x, target.y - carrier.y);
+          if (dist < carrier.r + target.r + 5) {
+            carrier.hasBomb = false;
+            carrier.passCooldown = 0.75;
+            target.hasBomb = true;
+            target.passCooldown = 0.75;
+
+            if (carrier.isAI) showPlayerEmote(carrier, "😂");
+            if (target.isAI) showPlayerEmote(target, "😭");
+
+            passEffects.push({
+              x: target.x,
+              y: target.y,
+              radius: 16,
+              life: 0.45
+            });
+            break;
+          }
+        }
+      }
+
+      updateHUDAndCamera(dt);
+
+      // 온라인 게스트들에게 상태 동기화 브로드캐스트
+      if (clientConns.size > 0) {
+        netSyncTimer += dt;
+        if (netSyncTimer >= 0.04) {
+          netSyncTimer = 0;
+          const syncPayload = { type: "STATE_SYNC", roundTimer, players, passEffects };
+          clientConns.forEach(conn => {
+            if (conn.open) conn.send(syncPayload);
+          });
+        }
+      }
+
+      // 60초 종료 시 마지막 폭탄을 들고 있는 2명 사망 처리
+      if (roundTimer <= 0) {
+        const finalCarriers = players.filter(p => p.alive && p.hasBomb);
+        const deadNames = finalCarriers.map(p => p.name);
+        finalCarriers.forEach(p => { p.alive = false; });
+
+        clientConns.forEach(conn => {
+          if (conn.open) {
+            conn.send({ type: "GAME_OVER", players, deadNames });
+          }
+        });
+
+        finishRoundUI(deadNames);
+      }
+    }
+
+    function updateHUDAndCamera(dt) {
+      const nowCarriers = players.filter(p => p.alive && p.hasBomb);
+      const aliveCount = players.filter(p => p.alive).length;
+
+      timerEl.textContent = `${roundTimer.toFixed(1)}s`;
+      timerEl.classList.toggle("danger", roundTimer <= 10);
+      carrierTextEl.textContent =
+        `폭탄 술래(2명): ${nowCarriers.length ? nowCarriers.map(c => c.name).join(", ") : "없음"}`;
+      aliveTextEl.textContent = `생존: ${aliveCount} / ${TOTAL_PLAYERS}`;
+
+      const me = players.find(p => p.peerId === myPeerId) || players[0];
+      if (me) {
+        if (!me.alive) {
+          myStatusEl.textContent = "💀 사망 (탈락)";
+          myStatusEl.style.color = "#ef4444";
+        } else if (me.hasBomb) {
+          myStatusEl.textContent = "💣 폭탄 술래! 닿아서 넘기세요!";
+          myStatusEl.style.color = "#f97316";
+        } else {
+          myStatusEl.textContent = "🏃 도망 중 (술래 2명 회피)";
+          myStatusEl.style.color = "#38bdf8";
+        }
+
+        // 대쉬 버튼 3초 쿨타임 UI 갱신
+        if (me.dashCooldown > 0) {
+          dashBtn.classList.add("cooldown");
+          dashSub.textContent = `${me.dashCooldown.toFixed(1)}s`;
+        } else {
+          dashBtn.classList.remove("cooldown");
+          dashSub.textContent = "준비됨";
+        }
+
+        const focus = me.alive ? me : (nowCarriers[0] || me);
+        camera.x += (focus.x - camera.x) * Math.min(1, dt * 8.5);
+        camera.y += (focus.y - camera.y) * Math.min(1, dt * 8.5);
+      }
+    }
+
+    function finishRoundUI(deadNames) {
+      state = "ENDED";
+      setGameplayControlsVisible(false);
+      overlay.style.display = "flex";
+
+      const aliveAfter = players.filter(p => p.alive).length;
+      aliveTextEl.textContent = `생존: ${aliveAfter} / ${TOTAL_PLAYERS}`;
+
+      const me = players.find(p => p.peerId === myPeerId) || players[0];
+      const amIDead = me && !me.alive;
+
+      queueStatus.style.color = amIDead ? "#ef4444" : "#4ade80";
+      queueStatus.textContent = amIDead
+        ? `💥 60초 종료! 당신이 폭탄을 들고 있어 사망했습니다! (탈락자: ${deadNames.join(", ")})`
+        : `🎉 60초 종료! 생존 성공! (폭탄 보유 사망자: ${deadNames.join(", ") || "없음"})`;
+
+      if (clientConns.size > 0 && isHost) {
+        state = "ROOM_WAIT";
+        roomLobbyBox.style.display = "block";
+        startRoomGameBtn.style.display = "block";
+      }
+    }
+
+    // =========================================================================
+    // 7. 2D 월드, 2술래 경고 오라, 화면 밖 술래 방향 표시 및 미니맵 렌더링
+    // =========================================================================
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const offsetX = canvas.width / 2 - camera.x;
+      const offsetY = canvas.height / 2 - camera.y;
+
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+
+      // 선택된 맵 배경
+      ctx.fillStyle = currentMap.bg;
+      ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
+      // 그리드
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.07)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= WORLD_W; x += 80) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, WORLD_H);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= WORLD_H; y += 80) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(WORLD_W, y);
+        ctx.stroke();
+      }
+
+      // 맵 외곽 경계선
+      ctx.strokeStyle = currentMap.border;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
+
+      // 맵 장애물
+      for (const ob of currentMap.obstacles) {
+        ctx.fillStyle = currentMap.wallFill;
+        ctx.strokeStyle = currentMap.wallStroke;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.roundRect(ob.x, ob.y, ob.w, ob.h, 10);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // 대쉬 잔상 트레일
+      for (const tr of dashTrails) {
+        ctx.beginPath();
+        ctx.arc(tr.x, tr.y, tr.r * 0.9, 0, Math.PI * 2);
+        ctx.fillStyle = tr.color + "44";
+        ctx.fill();
+      }
+
+      // 폭탄 전달 파동 이펙트
+      for (const ef of passEffects) {
+        ctx.beginPath();
+        ctx.arc(ef.x, ef.y, ef.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(250, 204, 21, ${ef.life * 2})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+
+      // 10명 플레이어 렌더링
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 110);
+      for (const p of players) {
+        if (!p.alive) continue;
+
+        if (p.hasBomb) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r + 12 + pulse * 6, 0, Math.PI * 2);
+          ctx.fillStyle = "rgba(239, 68, 68, 0.24)";
+          ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = p.skin.color;
+        ctx.fill();
+        ctx.lineWidth = p.peerId === myPeerId ? 4 : 2.5;
+        ctx.strokeStyle = p.hasBomb ? "#ff2a2a" : p.skin.ring;
+        ctx.stroke();
+
+        // 폭탄 아이콘
+        if (p.hasBomb) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y - p.r - 13, 9.5, 0, Math.PI * 2);
+          ctx.fillStyle = "#ef4444";
+          ctx.fill();
+          ctx.strokeStyle = "#fef08a";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(p.x + 5, p.y - p.r - 20, 3, 0, Math.PI * 2);
+          ctx.fillStyle = "#fde047";
+          ctx.fill();
+        }
+
+        ctx.fillStyle = p.peerId === myPeerId ? "#38bdf8" : "#f8fafc";
+        ctx.font = "700 12px 'Noto Sans KR', sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(p.name, p.x, p.y + p.r + 17);
+
+        // 캐릭터 머리 위 실시간 이모티콘 말풍선 렌더링
+        if (p.emote && p.emoteTimer > 0) {
+          const alpha = Math.min(1, p.emoteTimer * 2.5);
+          const popScale = p.emoteTimer > EMOTE_DURATION - 0.18
+            ? 0.7 + ((EMOTE_DURATION - p.emoteTimer) / 0.18) * 0.35
+            : 1.0;
+          const floatOffset = Math.sin((EMOTE_DURATION - p.emoteTimer) * 6) * 2.5;
+          const bubbleY = p.y - p.r - (p.hasBomb ? 46 : 30) - floatOffset;
+
+          ctx.save();
+          ctx.globalAlpha = alpha;
+          ctx.translate(p.x, bubbleY);
+          ctx.scale(popScale, popScale);
+
+          // 말풍선 배경
+          ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+          ctx.strokeStyle = p.hasBomb ? "#f97316" : "#38bdf8";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(-20, -18, 40, 32, 10);
+          ctx.fill();
+          ctx.stroke();
+
+          // 말풍선 꼬리 삼각형
+          ctx.beginPath();
+          ctx.moveTo(-5, 14);
+          ctx.lineTo(5, 14);
+          ctx.lineTo(0, 20);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+          ctx.fill();
+
+          // 이모티콘 텍스트
+          ctx.font = "20px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(p.emote, 0, -1);
+          ctx.restore();
+        }
+      }
+
+      ctx.restore();
+
+      // 화면 밖 술래(최대 2명) 방향 화살표 인디케이터
+      if (state === "PLAYING" && players.length > 0) {
+        const carriers = players.filter(p => p.alive && p.hasBomb);
+        for (const carrier of carriers) {
+          const screenX = carrier.x + offsetX;
+          const screenY = carrier.y + offsetY;
+          const margin = 46;
+          if (
+            screenX < margin ||
+            screenX > canvas.width - margin ||
+            screenY < margin ||
+            screenY > canvas.height - margin
+          ) {
+            const angle = Math.atan2(screenY - canvas.height / 2, screenX - canvas.width / 2);
+            const ix = Math.max(margin, Math.min(canvas.width - margin, canvas.width / 2 + Math.cos(angle) * (canvas.width * 0.42)));
+            const iy = Math.max(margin + 54, Math.min(canvas.height - margin, canvas.height / 2 + Math.sin(angle) * (canvas.height * 0.42)));
+
+            ctx.save();
+            ctx.translate(ix, iy);
+            ctx.rotate(angle);
+            ctx.beginPath();
+            ctx.moveTo(12, 0);
+            ctx.lineTo(-8, -8);
+            ctx.lineTo(-8, 8);
+            ctx.closePath();
+            ctx.fillStyle = "#ef4444";
+            ctx.fill();
+            ctx.strokeStyle = "#fef08a";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+      }
+
+      // 상단 중앙 미니맵 (하단 조이스틱 및 대쉬 버튼과 겹치지 않도록 상단에 배치)
+      if (players.length > 0 && state === "PLAYING") {
+        const mw = Math.min(156, canvas.width * 0.32);
+        const mh = mw * (WORLD_H / WORLD_W);
+        const mx = (canvas.width - mw) / 2;
+        const my = 78;
+
+        ctx.fillStyle = "rgba(15, 23, 42, 0.82)";
+        ctx.beginPath();
+        ctx.roundRect(mx, my, mw, mh, 10);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.35)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(71, 85, 105, 0.55)";
+        for (const ob of currentMap.obstacles) {
+          ctx.fillRect(
+            mx + (ob.x / WORLD_W) * mw,
+            my + (ob.y / WORLD_H) * mh,
+            (ob.w / WORLD_W) * mw,
+            (ob.h / WORLD_H) * mh
+          );
+        }
+
+        for (const p of players) {
+          if (!p.alive) continue;
+          const px = mx + (p.x / WORLD_W) * mw;
+          const py = my + (p.y / WORLD_H) * mh;
+          ctx.beginPath();
+          ctx.arc(px, py, p.hasBomb ? 4.2 : (p.peerId === myPeerId ? 3.6 : 2.6), 0, Math.PI * 2);
+          ctx.fillStyle = p.hasBomb ? "#ef4444" : (p.peerId === myPeerId ? "#38bdf8" : "#cbd5e1");
+          ctx.fill();
+        }
+      }
+    }
+
+    let lastTime = performance.now();
+    function gameLoop(now) {
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (state === "MATCHING") {
+        updateMatching(dt);
+      } else if (state === "PLAYING") {
+        updatePlaying(dt);
+      }
+
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.onload = function () {
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>
